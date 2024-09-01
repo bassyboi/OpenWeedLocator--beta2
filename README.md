@@ -1,5 +1,5 @@
 
-# OpenWeedLocator Project
+# OpenWeedLocator beta2 Project
 
 ## Project Overview
 OpenWeedLocator is a comprehensive system designed for precision agriculture, focusing on weed detection and management. The project is divided into three main components:
