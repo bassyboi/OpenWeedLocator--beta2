@@ -1,62 +1,51 @@
 
-import cv2
-import numpy as np
+#!/usr/bin/env python
+
+import zmq
 import time
 import threading
-
-# Import additional utility scripts
 from utils.camera_handler import CameraHandler
-from utils.coral_tflite_inference import CoralTFLiteInference
+from utils.greenonbrown import GreenOnBrown
 from utils.relay_controller import RelayController
-from utils.data_logger import DataLogger
 from utils.error_handler import ErrorHandler
-from utils.algorithms import exg  # Example import for an algorithm
-from utils.blur_algorithms import fft_blur, normalize_brightness  # Example blur functions
-from utils.button_inputs import ButtonInputs  # Handles GPIO button inputs
-from utils.cli_vis import RelayVis  # Command-line visualization tool for relays
-from utils.frame_reader import FrameReader  # Reads frames, if needed
-from utils.greenonbrown import GreenOnBrown  # Specific algorithm for weed detection
-from utils.greenongreen import GreenOnGreen  # Another specific algorithm for weed detection
-from utils.hailo_yolo_inference import HailoYOLOInference  # If using Hailo devices
-from utils.image_sampler import bounding_box_image_sample  # Example image sampling
-from utils.logger import Logger  # Alternative or additional logger
-from utils.relay_control import RelayControl  # Consolidate with relay_controller
-from utils.video import VideoHandler  # Handles video input
-from utils.video_analysis import four_frame_analysis  # Example for video analysis
 
-# Initialize components
-logger = DataLogger()
-error_handler = ErrorHandler(logger.logger)
-camera = CameraHandler(resolution=(416, 320), exp_compensation=-2)
-model = CoralTFLiteInference(model_path='models/model.tflite')
-relay_controller = RelayController(relay_pins=[11, 13, 15, 16])
+# ZeroMQ Client Setup
+context = zmq.Context()
+socket = context.socket(zmq.REQ)
+socket.connect("tcp://<SERVER_IP>:5555")  # Replace <SERVER_IP> with actual server IP
 
-# Initialize additional components if necessary
-button_inputs = ButtonInputs()  # Setup button input handling
-video_handler = VideoHandler()  # If additional video handling is required
-relay_vis = RelayVis()  # For command-line visualization of relay status
+def register_device():
+    # Register OWL device with the server
+    socket.send(b'REGISTER')
+    print(socket.recv().decode())
 
-# Main logic
-try:
-    camera.start_camera()
+def receive_commands():
+    # Receive commands from the server and execute
     while True:
-        frame = camera.read_frame()
-
-        # Apply preprocessing algorithms from algorithms.py or blur_algorithms.py
-        frame = exg(frame)  # Example algorithm application
-        frame = normalize_brightness(frame)  # Example blur normalization
-
-        # Run inference, control relays, etc.
-        if frame is not None:
-            inference_result = model.run_inference(frame)
-            if inference_result:
-                relay_controller.activate_relay(0, duration=0.5)  # Example action
-                relay_vis.update_display(inference_result)  # Visualize relay action
-
+        socket.send(b'REQUEST_COMMAND')
+        command = socket.recv().decode()
+        if command == 'STOP':
+            print("[INFO] Stopping OWL operations.")
+            break
         else:
-            logger.log_warning("No frame captured.")
-except Exception as e:
-    error_handler.handle_error(str(e))
-finally:
-    relay_controller.cleanup()
-    camera.stop_camera()
+            print(f"[INFO] Executing command: {command}")
+            # Add command execution logic here
+
+def main():
+    # Main function to run OWL operations
+    register_device()
+    threading.Thread(target=receive_commands, daemon=True).start()
+    
+    # Example of OWL operation loop
+    camera = CameraHandler()
+    weed_detector = GreenOnBrown()
+    relay = RelayController()
+
+    while True:
+        frame = camera.capture_frame()
+        weeds = weed_detector.detect_weeds(frame)
+        relay.control_relays(weeds)
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()
