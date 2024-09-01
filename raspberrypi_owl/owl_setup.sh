@@ -1,115 +1,156 @@
 #!/bin/bash
 
-# Function to check the exit status of the last executed command
+# Function to display a loading screen or progress indicator
+show_loading() {
+  echo -ne "[INFO] $1 in progress...\r"
+  sleep 1
+  echo -ne "[INFO] $1 in progress...\r"
+}
+
+# Function to check the exit status of the last executed command and log it
 check_status() {
   if [ $? -ne 0 ]; then
-    echo "[ERROR] $1 failed."
+    echo "[ERROR] $1 failed. Check the logs for more details." | tee -a owl_setup.log
     exit 1
   else
-    echo "[INFO] $1 completed successfully."
+    echo "[INFO] $1 completed successfully." | tee -a owl_setup.log
   fi
 }
 
+# Create a log file for setup process
+echo "[INFO] Starting OWL Raspberry Pi setup..." > owl_setup.log
+
 # Free up space
-echo "[INFO] Freeing up space by removing unnecessary packages..."
-sudo apt-get purge -y wolfram-engine
-sudo apt-get purge -y libreoffice*
-sudo apt-get clean
+show_loading "Freeing up space by removing unnecessary packages"
+echo "[INFO] Freeing up space by removing unnecessary packages..." | tee -a owl_setup.log
+sudo apt-get purge -y wolfram-engine >> owl_setup.log 2>&1
+sudo apt-get purge -y libreoffice* >> owl_setup.log 2>&1
+sudo apt-get clean >> owl_setup.log 2>&1
 check_status "Cleaning up"
 
-sudo apt-get autoremove -y
+sudo apt-get autoremove -y >> owl_setup.log 2>&1
 check_status "Removing unnecessary packages"
 
 # Update the system and firmware
-echo "[INFO] Updating the system and firmware..."
-sudo apt-get update && sudo apt-get upgrade -y
+show_loading "Updating the system and firmware"
+echo "[INFO] Updating the system and firmware..." | tee -a owl_setup.log
+sudo apt-get update && sudo apt-get upgrade -y >> owl_setup.log 2>&1
 check_status "System update and upgrade"
 
-sudo rpi-update
+sudo rpi-update >> owl_setup.log 2>&1
 check_status "Firmware update"
 
+# Install required libraries for GUI
+show_loading "Installing required libraries for GUI"
+echo "[INFO] Installing required libraries for GUI..." | tee -a owl_setup.log
+sudo apt-get install -y python3-tk python3-pil python3-pil.imagetk >> owl_setup.log 2>&1
+check_status "Installing Python libraries for GUI"
+
 # Set up the virtual environment
-echo "[INFO] Setting up the virtual environment..."
-echo "# virtualenv and virtualenvwrapper" >> ~/.bashrc
-echo "export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3" >> ~/.bashrc
-source ~/.bashrc
-check_status "Updating .bashrc for virtualenv"
-
-# Install virtualenv and virtualenvwrapper
-echo "[INFO] Installing virtualenv and virtualenvwrapper..."
-sudo apt-get install -y python3-virtualenv
-check_status "Installing python3-virtualenv"
-
-sudo apt-get install -y python3-virtualenvwrapper
-check_status "Installing python3-virtualenvwrapper"
+show_loading "Setting up the virtual environment"
+echo "[INFO] Setting up the virtual environment..." | tee -a owl_setup.log
+sudo apt-get install -y python3-virtualenv python3-virtualenvwrapper >> owl_setup.log 2>&1
+check_status "Installing virtual environment tools"
 
 echo "export WORKON_HOME=$HOME/.virtualenvs" >> ~/.bashrc
 echo "source /usr/share/virtualenvwrapper/virtualenvwrapper.sh" >> ~/.bashrc
-source /usr/share/virtualenvwrapper/virtualenvwrapper.sh
+source ~/.bashrc
 check_status "Updating .bashrc for virtualenvwrapper"
 
-sleep 1s
+# Create and activate a virtual environment
+show_loading "Creating and activating virtual environment 'owl_env'"
+echo "[INFO] Creating and activating virtual environment 'owl_env'..." | tee -a owl_setup.log
+mkvirtualenv owl_env -p python3 >> owl_setup.log 2>&1
+check_status "Creating virtual environment 'owl_env'"
 
-# Create the owl virtual environment
-echo "[INFO] Creating the 'owl' virtual environment..."
-mkvirtualenv --system-site-packages -p python3 owl
-check_status "Creating virtual environment 'owl'"
+workon owl_env
+check_status "Activating virtual environment 'owl_env'"
 
-sleep 1s
+# Install Python dependencies from requirements.txt
+show_loading "Installing Python dependencies"
+echo "[INFO] Installing Python dependencies from requirements.txt..." | tee -a owl_setup.log
+pip install -r requirements.txt >> owl_setup.log 2>&1
+check_status "Installing Python dependencies"
 
-# Install OpenCV in the owl virtual environment
-echo "[INFO] Installing OpenCV in the 'owl' virtual environment..."
-source $HOME/.virtualenvs/owl/bin/activate
-sleep 1s
-pip3 install opencv-contrib-python
-check_status "Installing OpenCV"
+# Install Python dependencies for clients from 'clients/requirements.txt'
+show_loading "Installing Python dependencies for clients"
+echo "[INFO] Installing Python dependencies for clients..." | tee -a owl_setup.log
+pip install -r clients/requirements.txt >> owl_setup.log 2>&1
+check_status "Installing Python dependencies for clients"
 
-sleep 1s
+# Copy 'clients' folder to a proper location
+show_loading "Setting up client scripts"
+echo "[INFO] Copying client scripts to /home/pi/clients..." | tee -a owl_setup.log
+mkdir -p /home/pi/clients
+cp -r clients/* /home/pi/clients/
+check_status "Copying client scripts"
 
-# Install the OWL Python dependencies
-echo "[INFO] Installing the OWL Python dependencies..."
-cd ~/owl
-pip install -r requirements.txt
-check_status "Installing dependencies from requirements.txt"
+# Create a systemd service file to run OWL on boot
+show_loading "Creating systemd service file"
+echo "[INFO] Creating systemd service file for OWL..." | tee -a owl_setup.log
 
-# Make the scripts executable
-echo "[INFO] Making scripts executable..."
-chmod a+x owl.py
-check_status "Making owl.py executable"
+SERVICE_FILE=/etc/systemd/system/owl.service
 
-chmod a+x owl_boot.sh
-check_status "Making owl_boot.sh executable"
+sudo bash -c "cat > $SERVICE_FILE" <<EOL
+[Unit]
+Description=OWL Service to Run on Boot
+After=network.target
 
-chmod a+x owl_boot_wrapper.sh
-check_status "Making owl_boot_wrapper.sh executable"
+[Service]
+User=pi  # Replace 'pi' with your Raspberry Pi user if different
+WorkingDirectory=/home/pi/raspberrypi_owl  # Replace with your OWL directory
+ExecStart=/home/pi/.virtualenvs/owl_env/bin/python /home/pi/raspberrypi_owl/owl.py  # Replace with the path to your Python script
+Restart=always
+RestartSec=5
 
-# Move the boot scripts to /usr/local/bin
-echo "[INFO] Moving boot scripts to /usr/local/bin..."
-sudo mv owl_boot.sh /usr/local/bin/owl_boot.sh
-check_status "Moving owl_boot.sh"
+[Install]
+WantedBy=multi-user.target
+EOL
 
-sudo mv owl_boot_wrapper.sh /usr/local/bin/owl_boot_wrapper.sh
-check_status "Moving owl_boot_wrapper.sh"
+check_status "Creating systemd service file"
 
-# Add the boot script to cron for startup
-echo "[INFO] Adding boot script to cron..."
-(crontab -l 2>/dev/null; echo "@reboot /usr/local/bin/owl_boot_wrapper.sh > /home/launch.log 2>&1") | sudo crontab -
-check_status "Adding boot script to cron"
+# Create a systemd service file to run the clients on boot
+show_loading "Creating systemd service file for clients"
+echo "[INFO] Creating systemd service file for clients..." | tee -a owl_setup.log
 
-echo "[INFO] Setting owl-background.png as the desktop background..."
-pcmanfm --set-wallpaper ~/owl/images/owl-background.png
-check_status "Setting desktop background"
+CLIENT_SERVICE_FILE=/etc/systemd/system/clients.service
 
-echo "[INFO] OWL setup complete."
-read -p "Start OWL focusing? (y/n): " choice
-case "$choice" in
-  y|Y ) echo "[INFO] Starting focusing..."; ./owl.py --focus;;
-  n|N ) echo "[INFO] Focusing skipped. Run './owl.py --focus' to focus the OWL at a later point";;
-  * ) echo "[ERROR] Invalid input. Please enter y or n.";;
-esac
-read -p "Launch OWL software? (y/n): " choice
-case "$choice" in
-  y|Y ) echo "[INFO] Launching OWL..."; ./owl.py --show-display;;
-  n|N ) echo "[INFO] Skipped. Run './owl.py --show-display' to launch the OWL at a later point";;
-  * ) echo "[ERROR] Invalid input. Please enter y or n.";;
-esac
+sudo bash -c "cat > $CLIENT_SERVICE_FILE" <<EOL
+[Unit]
+Description=Clients Service to Run on Boot
+After=network.target
+
+[Service]
+User=pi  # Replace 'pi' with your Raspberry Pi user if different
+WorkingDirectory=/home/pi/clients  # Replace with your clients directory
+ExecStart=/home/pi/.virtualenvs/owl_env/bin/python /home/pi/clients/client.py  # Replace with the main client script
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+check_status "Creating clients systemd service file"
+
+# Reload systemd, enable, and start the services
+show_loading "Enabling and starting OWL and clients services"
+echo "[INFO] Enabling and starting OWL and clients services..." | tee -a owl_setup.log
+sudo systemctl daemon-reload >> owl_setup.log 2>&1
+check_status "Reloading systemd"
+
+sudo systemctl enable owl.service >> owl_setup.log 2>&1
+check_status "Enabling OWL service"
+
+sudo systemctl start owl.service >> owl_setup.log 2>&1
+check_status "Starting OWL service"
+
+sudo systemctl enable clients.service >> owl_setup.log 2>&1
+check_status "Enabling clients service"
+
+sudo systemctl start clients.service >> owl_setup.log 2>&1
+check_status "Starting clients service"
+
+# Notify completion
+echo "[INFO] OWL Raspberry Pi setup completed successfully!" | tee -a owl_setup.log
+echo "[INFO] OWL and Clients will run automatically on boot." | tee -a owl_setup.log
