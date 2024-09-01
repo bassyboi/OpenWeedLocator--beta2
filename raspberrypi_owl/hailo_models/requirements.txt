@@ -1,0 +1,23 @@
+# Python libraries for machine learning and image processing
+numpy>=1.19.5
+opencv-python>=4.5.3.56
+Pillow>=8.3.2
+
+# YOLOv8 specific requirements
+torch>=1.10
+torchvision>=0.11.1
+torchaudio>=0.10.0
+matplotlib>=3.4.3
+pandas>=1.3.3
+scipy>=1.7.1
+
+# Utilities for development and debugging
+ipython>=7.27.0
+jupyter>=1.0.0
+
+# Additional useful packages
+requests>=2.26.0
+
+# Hailo SDK specific requirements
+# Note: Actual Python packages for Hailo SDK should be confirmed with Hailo documentation or support
+# hailo-sdk-python==<specific_version> # Uncomment and specify version if there's a pip-installable Hailo SDK

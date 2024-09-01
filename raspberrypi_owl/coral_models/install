@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# Single .sh file to install Google Coral requirements for the Raspberry Pi with Python 3.11
+# Using a workaround to install pycoral from a non-official build
+
+# Update and upgrade existing packages
+sudo apt-get update && sudo apt-get upgrade -y
+
+# Add Coral repository and key
+echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" | sudo tee /etc/apt/sources.list.d/coral-edgetpu.list
+curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+# Update package list
+sudo apt-get update
+
+# Ask user to select operating frequency
+echo "Do you want to install with MAX OPERATING FREQUENCY? Doing so will increase framerate but also device temperature and power consumption."
+echo "Check official Google Coral documentation for full differences: https://coral.ai/docs/accelerator/get-started/"
+read -r -p "Install MAX OPERATING FREQUENCY? [y/N] " response
+if [[ "$response" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
+    echo "Installing MAX OPERATING FREQUENCY..."
+    sudo apt-get install libedgetpu1-max -y
+else
+    echo "Installing STANDARD OPERATING FREQUENCY..."
+    sudo apt-get install libedgetpu1-std -y
+fi
+
+# Prompt user to connect the Google Coral USB device
+while true; do
+  echo "Please connect the Google-Coral USB device to the USB 3.0 port. Press [y] then enter to continue."
+  read -r -p "Continue? [y/N] " response
+  if [[ "$response" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
+      break
+  else
+      echo "Invalid response. Please try again."
+  fi
+done
+
+# Load virtualenvwrapper if not already loaded
+if [ -z "$WORKON_HOME" ]; then
+    export WORKON_HOME=~/Envs  # or wherever your environments are stored
+    source /usr/local/bin/virtualenvwrapper.sh  # Adjust the path if needed
+fi
+
+# Activate the owl virtual environment
+echo "Activating 'owl' virtual environment using 'workon owl'..."
+workon owl
+
+# Install PyCoral library from GitHub release for Python 3.11
+echo "Downloading and installing PyCoral for Python 3.11 from a non-official release..."
+wget https://github.com/oberluz/pycoral/releases/download/2.13.0/pycoral-2.13.0-cp311-cp311-linux_aarch64.whl
+pip install pycoral-2.13.0-cp311-cp311-linux_aarch64.whl --no-deps
+
+# Install TensorFlow Lite runtime compatible with Python 3.11
+echo "Installing TensorFlow Lite runtime (version 2.14.0) in the 'owl' virtual environment..."
+pip install tflite-runtime==2.14.0
+
+echo "Installation and setup completed successfully within the 'owl' virtual environment with Python 3.11!"

@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# This script should not be run as root when dealing with virtual environments
+if [[ $EUID -eq 0 ]]; then
+    echo "Please do not run this script as root when setting up Python environments."
+    exit 1
+fi
+
+# Source the virtualenvwrapper.sh script
+# This needs to be set according to your installation of virtualenvwrapper
+if [[ -f "$HOME/.bashrc" ]]; then
+    source "$HOME/.bashrc"
+elif [[ -f "/usr/local/bin/virtualenvwrapper.sh" ]]; then
+    source "/usr/local/bin/virtualenvwrapper.sh"
+elif [[ -f "/etc/bash_completion.d/virtualenvwrapper" ]]; then
+    source "/etc/bash_completion.d/virtualenvwrapper"
+else
+    echo "virtualenvwrapper could not be found. Please install it or check your installation."
+    exit 1
+fi
+
+# Check if the 'owl' virtual environment exists, and create it if it doesn't
+if lsvirtualenv | grep -q '^owl$'; then
+    echo "Virtual environment 'owl' already exists, activating..."
+else
+    echo "Creating virtual environment 'owl'..."
+    mkvirtualenv -p python3 owl
+fi
+
+workon owl
+
+# Ask for sudo access for system package operations
+echo "Some operations require superuser access..."
+sudo echo "Superuser access granted."
+
+# System package update and installation
+sudo apt-get update && sudo apt-get upgrade -y
+sudo apt-get install -y python3-pip git pkg-config
+
+# Hailo SDK installation and setup
+echo "Adding Hailo repository and installing SDK..."
+echo "deb [signed-by=/usr/share/keyrings/hailo-archive-keyring.gpg] https://repo.hailo.ai/apt/ stable main" | sudo tee /etc/apt/sources.list.d/hailo.list
+curl -fsSL https://repo.hailo.ai/hailo-archive-keyring.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hailo-archive-keyring.gpg > /dev/null
+sudo apt-get update
+sudo apt-get install -y hailo-sdk
+
+# Clone YOLOv8 repository and install Python requirements
+echo "Cloning YOLOv8 repository and installing Python dependencies..."
+git clone https://github.com/ultralytics/yolov8
+cd yolov8
+pip install -r requirements.txt
+cd ..
+
+# Optionally check for and activate additional configurations
+if pkg-config --exists hailo_tappas; then
+    TAPPAS_WORKSPACE=$(pkg-config --variable=tappas_workspace hailo_tappas)
+    export TAPPAS_WORKSPACE
+    echo "TAPPAS_WORKSPACE set to $TAPPAS_WORKSPACE"
+fi
+
+echo "Installation and configuration complete."
+
+
