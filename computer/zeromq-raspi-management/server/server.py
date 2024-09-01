@@ -1,211 +1,103 @@
+
 #!/usr/bin/env python
+
 import zmq
 import os
-import argparse
 import time
-import tkinter as tk
-from tkinter import messagebox, scrolledtext, ttk
-from configparser import ConfigParser
-import paramiko
+import threading
 from concurrent.futures import ThreadPoolExecutor
-from utils.button_inputs import BasicController
-from utils.image_sampler import ImageRecorder
-from utils.blur_algorithms import fft_blur
-from utils.greenonbrown import GreenOnBrown
-from utils.relay_control import RelayController, StatusIndicator
-from utils.frame_reader import FrameReader
-from multiprocessing import Value, Process
-from pathlib import Path
-from datetime import datetime
-from imutils.video import FPS
-from utils.video import VideoStream
-from time import strftime
-import imutils
-import sys
-import cv2
 
-# Add LiDARNode class to handle LiDAR operations
-class LiDARNode:
-    def __init__(self, lidar_port='/dev/ttyS0', baud_rate=115200, target_distance=1000, threshold=50):
-        self.lidar_port = lidar_port
-        self.baud_rate = baud_rate
-        self.target_distance = target_distance
-        self.threshold = threshold
-        self.lidar_enabled = False  # Enable/disable flag
+# ZeroMQ Context Initialization
+context = zmq.Context()
+socket = context.socket(zmq.ROUTER)  # Using ROUTER for managing multiple clients
+socket.bind("tcp://*:5555")
 
-    def read_lidar_distance(self):
-        """Function to read distance data from LiDAR."""
-        # Example of reading from a serial port
-        # Add actual LiDAR reading logic here
-        return 1000  # Placeholder distance
+# Device Management
+devices = {}
+device_health = {}
+command_history = []
 
-    def control_actuator(self, current_distance):
-        """Control the actuator based on LiDAR distance reading."""
-        if not self.lidar_enabled:
-            return
+def check_device_health():
+    # Periodically check the health of connected devices.
+    while True:
+        for device_id in list(devices.keys()):
+            try:
+                socket.send_multipart([device_id, b"PING"])
+                message = socket.recv_multipart(flags=zmq.NOBLOCK)
+                if message[1] == b"PONG":
+                    device_health[device_id] = 'Healthy'
+            except zmq.Again:
+                print(f"[WARNING] Device {device_id.decode()} did not respond.")
+                device_health[device_id] = 'Unresponsive'
+            time.sleep(1)  # Health check interval
 
-        # Logic to control actuator based on current_distance
-        print(f"Controlling actuator: Current Distance = {current_distance}")
+def handle_client_message(client_id, message):
+    # Handle incoming messages from clients.
+    if message == b'REGISTER':
+        devices[client_id] = {'status': 'Connected'}
+        device_health[client_id] = 'Healthy'
+        print(f"[INFO] New device registered: {client_id.decode()}")
+    elif message.startswith(b'ERROR'):
+        error_msg = message.decode()
+        print(f"[ERROR] {error_msg}")
+    else:
+        print(f"[INFO] Message from {client_id.decode()}: {message.decode()}")
 
-# Existing functions
-def nothing(x):
-    pass
+def receive_messages():
+    # Continuously receive messages from clients.
+    while True:
+        client_id, message = socket.recv_multipart()
+        handle_client_message(client_id, message)
 
-def update_ini_file(file_path, new_content):
-    """Function to update the .ini file."""
-    with open(file_path, 'w') as file:
-        file.write(new_content)
-    print(f"Updated INI file at {file_path}")
+def send_command_to_device(device_id, command):
+    # Send a command to a specific device.
+    if device_id in devices:
+        socket.send_multipart([device_id.encode(), command.encode()])
+        print(f"[INFO] Sent command '{command}' to device {device_id}")
+        command_history.append((device_id, command))
+    else:
+        print(f"[ERROR] Device {device_id} not found.")
 
-def upload_model(model_path, destination_path):
-    """Function to upload a model to the specified path."""
-    os.system(f"scp {model_path} {destination_path}")
-    print(f"Uploaded model to {destination_path}")
+def list_devices():
+    # List all connected devices and their status.
+    print("Connected Devices:")
+    for device_id, status in devices.items():
+        print(f"  - {device_id.decode()}: {status['status']}, Health: {device_health.get(device_id, 'Unknown')}")
 
-class ZeroMQServer:
-    def __init__(self):
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REQ)
-        self.socket.bind("tcp://*:5555")
-        print("ZeroMQ Server started and bound to tcp://*:5555")
+def command_line_interface():
+    # Simple CLI for server management.
+    while True:
+        print("\nCommands: list, send [device_id] [command], history, exit")
+        user_input = input("> ").strip().split()
 
-    def send_command(self, command):
-        try:
-            self.socket.send_string(command)
-            print(f"Sent command: {command}")
-            response = self.socket.recv_string()
-            print(f"Received response: {response}")
-            return response
-        except Exception as e:
-            print(f"Error sending command: {e}")
-            return None
+        if not user_input:
+            continue
+        elif user_input[0] == 'list':
+            list_devices()
+        elif user_input[0] == 'send' and len(user_input) >= 3:
+            send_command_to_device(user_input[1], ' '.join(user_input[2:]))
+        elif user_input[0] == 'history':
+            print("Command History:")
+            for device, cmd in command_history:
+                print(f"  - {device}: {cmd}")
+        elif user_input[0] == 'exit':
+            break
+        else:
+            print("[ERROR] Invalid command.")
 
-    def send_file_to_pi(self, hostname, username, password, local_path, remote_path):
-        try:
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(hostname, username=username, password=password)
-            sftp = ssh.open_sftp()
-            sftp.put(local_path, remote_path)
-            sftp.close()
-            ssh.close()
-            print(f"Successfully sent {local_path} to {hostname}:{remote_path}")
-            return True
-        except Exception as e:
-            print(f"Error sending file to {hostname}: {e}")
-            return False
+# Main function
+def main():
+    # Main function to start server operations.
+    print("[INFO] Starting ZeroMQ server...")
+    
+    # Start message receiving thread
+    threading.Thread(target=receive_messages, daemon=True).start()
+    
+    # Start health check thread
+    threading.Thread(target=check_device_health, daemon=True).start()
 
-class Owl:
-    def __init__(self, show_display=False, focus=False, input_file_or_directory=None,
-                 config_file='config/DAY_SENSITIVITY_2.ini', lidar_node=None):
-        self._config_path = Path(__file__).parent / config_file
-        self.config = ConfigParser()
-        self.config.read(self._config_path)
-        self.lidar_node = lidar_node
-
-    def update_config_file(self, new_config_file):
-        self._config_path = Path(__file__).parent / new_config_file
-        self.config.read(self._config_path)
-        print(f"Configuration file updated to {self._config_path}")
-
-    def boom_flush(self, duration=5):
-        pass
-
-    def stop_boom_flush(self):
-        pass
-
-    def hoot(self):
-        if self.lidar_node and self.lidar_node.lidar_enabled:
-            distance = self.lidar_node.read_lidar_distance()
-            print(f"LiDAR Distance: {distance} mm")
-            self.lidar_node.control_actuator(distance)
-
-class ServerUI:
-    def __init__(self, server):
-        self.server = server
-        self.config = ConfigParser()
-        self.lidar_node = LiDARNode()  # Initialize LiDAR Node
-        self.raspberry_pis = [
-            {"hostname": "192.168.1.100", "username": "pi", "password": "raspberry"},
-            {"hostname": "192.168.1.101", "username": "pi", "password": "raspberry"},
-        ]
-        self.root = tk.Tk()
-        self.root.title("ZeroMQ Server Control Panel")
-        self.create_widgets()
-        self.root.mainloop()
-
-    def create_widgets(self):
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        self.create_system_tab()
-        self.create_controller_tab()
-        self.create_visualisation_tab()
-        self.create_camera_tab()
-        self.create_green_on_green_tab()
-        self.create_green_on_brown_tab()
-        self.create_data_collection_tab()
-        self.create_relays_tab()
-        self.create_lidar_tab()  # Add LiDAR configuration tab
-        self.save_button = tk.Button(self.root, text="Save Configuration", command=self.save_configuration)
-        self.save_button.grid(row=1, column=0, padx=5, pady=5)
-        self.send_button = tk.Button(self.root, text="Send Config to Raspberry Pis", command=self.send_config_to_raspberry_pis)
-        self.send_button.grid(row=2, column=0, padx=5, pady=5)
-
-    def create_lidar_tab(self):
-        """Create a tab for LiDAR configuration and control."""
-        self.lidar_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.lidar_tab, text='LiDAR Control')
-        self.lidar_enable_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(self.lidar_tab, text="Enable LiDAR", variable=self.lidar_enable_var).grid(row=0, column=0)
-        self.lidar_distance_label = tk.Label(self.lidar_tab, text="LiDAR Distance: N/A")
-        self.lidar_distance_label.grid(row=1, column=0)
-
-    def save_configuration(self):
-        self.config['System'] = {
-            'algorithm': self.algorithm_entry.get(),
-            'input_file_or_directory': self.input_entry.get(),
-            'relay_num': self.relay_num_entry.get(),
-            'actuation_duration': self.actuation_duration_entry.get(),
-            'delay': self.delay_entry.get()
-        }
-        config_path = 'OpenWeedLocator/config/config.ini'
-        with open(config_path, 'w') as configfile:
-            self.config.write(configfile)
-        messagebox.showinfo("Success", f"Configuration saved to {config_path}")
-
-    def send_config_to_raspberry_pis(self):
-        local_path = 'OpenWeedLocator/config/config.ini'
-        remote_path = '/home/pi/OpenWeedLocator/config/config.ini'
-        with ThreadPoolExecutor(max_workers=len(self.raspberry_pis)) as executor:
-            futures = []
-            for pi in self.raspberry_pis:
-                futures.append(executor.submit(self.server.send_file_to_pi, pi['hostname'], pi['username'], pi['password'], local_path, remote_path))
-            for future in futures:
-                if future.result():
-                    print("File sent successfully!")
-                else:
-                    print("Failed to send file to one of the Raspberry Pis.")
-        messagebox.showinfo("Info", "Configuration file transfer completed.")
+    # Start CLI for server management
+    command_line_interface()
 
 if __name__ == "__main__":
-    server = ZeroMQServer()
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--show-display', action='store_true', default=False, help='show display windows')
-    ap.add_argument('--focus', action='store_true', default=False, help='add FFT blur to output frame')
-    ap.add_argument('--input', type=str, default=None, help='path to image directory, single image or video file')
-    ap.add_argument('--enable-lidar', action='store_true', help='Enable LiDAR node')
-
-    args = ap.parse_args()
-    lidar_node = LiDARNode() if args.enable_lidar else None
-
-    owl = Owl(config_file='config/DAY_SENSITIVITY_2.ini',
-              show_display=args.show_display,
-              focus=args.focus,
-              input_file_or_directory=args.input,
-              lidar_node=lidar_node)
-
-    zmq_process = Process(target=server.send_command, args=('Command example',))
-    zmq_process.start()
-    app = ServerUI(server)
-    owl.hoot()
-    zmq_process.join()
+    main()
