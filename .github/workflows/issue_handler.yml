@@ -1,6 +1,6 @@
 - name: Label Issue Based on Analysis
   env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    GITHUB_TOKEN: ${{ secrets.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 }}
   run: |
     python -c "
 from github import Github
