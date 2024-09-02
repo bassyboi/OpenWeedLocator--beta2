@@ -2,7 +2,6 @@
 
 import argparse
 import zmq
-import time
 import threading
 import cv2
 import imutils
@@ -43,7 +42,8 @@ def owl_operations(show_display, focus, input_file_or_directory, algorithm):
 
     # Choose weed detection algorithm based on user input
     if algorithm == 'gog':
-        weed_detector = GreenOnGreen(model_path='path/to/model.tflite')  # Replace with actual model path
+        weed_detector = GreenOnGreen(
+            model_path='path/to/model.tflite')  # Replace with actual model path
     else:
         weed_detector = GreenOnBrown()
 
@@ -60,9 +60,11 @@ def owl_operations(show_display, focus, input_file_or_directory, algorithm):
 
         # Perform weed detection using the chosen algorithm
         if algorithm == 'gog':
-            cnts, boxes, weed_centres, image_out = weed_detector.inference(frame, confidence=0.5)
+            cnts, boxes, weed_centres, image_out = weed_detector.inference(
+                frame, confidence=0.5)
         else:
-            cnts, boxes, weed_centres, image_out = weed_detector.detect_weeds(frame)
+            cnts, boxes, weed_centres, image_out = weed_detector.detect_weeds(
+                frame)
 
         # Control relays based on detected weed positions
         relay_controller.control_relays(weed_centres)
@@ -84,10 +86,15 @@ def main():
     """Main function that registers the OWL device and starts operations."""
     # Parse command-line arguments
     ap = argparse.ArgumentParser()
-    ap.add_argument('--show-display', action='store_true', default=False, help='show display windows')
-    ap.add_argument('--focus', action='store_true', default=False, help='add FFT blur to output frame')
-    ap.add_argument('--input', type=str, default=None, help='path to image directory, single image or video file')
-    ap.add_argument('--algorithm', type=str, default='gob', choices=['gob', 'gog'], help='algorithm to use: GreenOnBrown (gob) or GreenOnGreen (gog)')
+    ap.add_argument('--show-display', action='store_true', default=False,
+                    help='show display windows')
+    ap.add_argument('--focus', action='store_true', default=False,
+                    help='add FFT blur to output frame')
+    ap.add_argument('--input', type=str, default=None,
+                    help='path to image directory, single image or video file')
+    ap.add_argument('--algorithm', type=str, default='gob',
+                    choices=['gob', 'gog'],
+                    help='algorithm to use: GreenOnBrown (gob) or GreenOnGreen (gog)')
 
     args = ap.parse_args()
 
