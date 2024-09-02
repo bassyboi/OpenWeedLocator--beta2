@@ -71,7 +71,7 @@ jobs:
       - name: Commit and Push Fixes
         if: failure() # Run this step if changes were applied
         env:
-          GH_TOKEN: ${{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}}
+          GH_TOKEN: ${{ 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.GH_TOKEN }}
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
