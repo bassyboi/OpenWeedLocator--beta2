@@ -26,6 +26,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install jq
+        run: sudo apt-get install jq
+
       - name: Run tests on Raspberry Pi emulator
         run: |
           # Example of running tests on a Raspberry Pi emulator
@@ -43,7 +46,7 @@ jobs:
       - name: Check for errors and interact with ChatGPT API
         if: failure() # Run this step only if the previous step fails
         env:
-          OPENAI_API_KEY: ${{ secrets.org-wDlbTUaF6HpLjslBuBUup9YE }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           # Extract the error logs
           ERROR_LOG=$(tail -n 50 logs/test_output.log) # Adjust the number of lines as needed
@@ -54,24 +57,33 @@ jobs:
           -H "Content-Type: application/json" \
           -d '{
             "model": "gpt-4",
-            "messages": [{"role": "user", "content": "The following error was found during testing:\n'"$ERROR_LOG"'\nPlease provide a fix for the error."}]
+            "messages": [{"role": "user", "content": "The following error was found during testing:\n'"$ERROR_LOG"'\nPlease provide the exact code changes needed to fix the error in a structured JSON format."}]
           }' | jq -r '.choices[0].message.content')
           
-          # Display the suggestion from ChatGPT
-          echo "$RESPONSE"
+          # Check if RESPONSE is not empty
+          if [ -z "$RESPONSE" ]; then
+            echo "No suggestion from ChatGPT. Skipping code changes."
+            exit 1
+          else
+            echo "Suggestion from ChatGPT: $RESPONSE"
+          fi
 
       - name: Apply suggested code changes
-        if: failure() # Run this step only if ChatGPT provided a suggestion
+        if: success() # Run this step only if ChatGPT provided a suggestion
         run: |
-          # Automatically modify code based on ChatGPT suggestion if feasible
-          echo "$RESPONSE" > suggested_fixes.txt
-          # Example placeholder for manual or semi-automated code integration
-          # Here you would implement automatic code changes if possible
+          # Save the response to a file
+          echo "$RESPONSE" > suggested_changes.json
+          
+          # Use a Python script to parse the JSON and apply the changes
+          python apply_changes.py suggested_changes.json
+          
+          # Show the diff for verification
+          git diff
 
       - name: Commit and Push Fixes
-        if: failure() # Run this step if changes were applied
+        if: success() # Run this step if changes were applied
         env:
-          GH_TOKEN: ${{ secrets.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 }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
