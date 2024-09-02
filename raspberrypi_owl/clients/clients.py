@@ -14,7 +14,8 @@ def main():
     while True:
         # Get command from user input
         command = input(
-            "Enter command (e.g., 'UPDATE_INI', 'UPLOAD_MODEL', 'CHANGE_CONFIG_FILE') or 'exit' to quit: "
+            "Enter command (e.g., 'UPDATE_INI', 'UPLOAD_MODEL', 'CHANGE_CONFIG_FILE') "
+            "or 'exit' to quit: "
         )
 
         if command.lower() == 'exit':
