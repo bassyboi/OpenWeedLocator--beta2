@@ -1,0 +1,85 @@
+# Theory of Operation for Open Weed Locator (OWL) System
+
+## Overview
+
+The Open Weed Locator (OWL) is a modular, scalable system designed for precision agriculture tasks, such as in-field weed detection and automated height control. It utilizes a network of Raspberry Pi devices equipped with AI accelerators (Coral or Hailo) and LiDAR sensors, all managed from a central server. The system supports remote control, configuration updates, and data collection, enabling efficient and dynamic agricultural operations.
+
+## System Architecture
+
+1. **Central Server (Control Node)**
+   - Manages communication with Raspberry Pi devices over a network.
+   - Uses ZeroMQ for messaging and remote management, allowing dynamic updates to configurations and AI models.
+   - Coordinates data collection, processes commands, and synchronizes operations across all nodes.
+
+2. **Raspberry Pi Clients (Detection and Control Nodes)**
+   - Perform specific roles such as weed detection (`owl.py`) or LiDAR-based height control.
+   - Equipped with AI accelerators (Coral Edge TPU or Hailo AI module) for real-time image processing and model inference.
+   - Communicate with the central server to receive commands, send status updates, and upload collected data.
+
+3. **LiDAR-Based Height Control System**
+   - Uses LiDAR sensors mounted on Raspberry Pi devices to maintain a set distance from crops.
+   - Integrated with hydraulic or electric actuators to adjust the height of machinery automatically.
+
+4. **AI Models and Algorithms**
+   - Utilizes pre-trained and fine-tuned deep learning models optimized for edge devices to detect weeds in images captured by cameras.
+   - Supports multiple weed detection algorithms (`GreenOnBrown` and `GreenOnGreen`) for different field conditions.
+
+5. **Configuration and Management System**
+   - Centralizes configuration management, allowing dynamic updates to `.ini` files for various parameters such as sensitivity settings, camera configurations, and detection thresholds.
+   - Facilitates efficient system management through scripts and automated tools for deployment, updates, and synchronization.
+
+## Key Components and Their Interactions
+
+1. **Weed Detection Module (`owl.py`)**
+   - The primary script responsible for detecting weeds in real-time.
+   - Utilizes AI accelerators to run deep learning models on input images from cameras.
+   - Detects objects (weeds), filters results based on confidence levels and object IDs, and calculates bounding boxes and centers for detected weeds.
+   - Provides visualization options for detected objects and integrates with relay controllers for in-field actions.
+
+2. **LiDAR Height Control Module**
+   - Runs independently on dedicated Raspberry Pi devices to measure height above crops using LiDAR sensors.
+   - Communicates with hydraulic or electric actuators to adjust machinery height, ensuring consistent coverage and optimal conditions.
+
+3. **Central Server Management (ZeroMQ-Based)**
+   - Hosts the `zeromq-raspi-management` system that handles communication with Raspberry Pi nodes.
+   - Supports command issuance, configuration updates, model uploads, and data collection requests.
+   - Provides a centralized interface for monitoring and controlling all nodes within the system.
+
+4. **AI Model Inference**
+   - Leverages deep learning models optimized for Coral Edge TPU and Hailo accelerators to perform inference tasks.
+   - Models are stored in directories (`coral_models` and `hailo_models`) and loaded dynamically based on the desired operation.
+   - Supports multiple detection algorithms (`GreenOnBrown`, `GreenOnGreen`) for flexibility in different crop environments.
+
+5. **Relay Control and Actuation**
+   - Integrated with the weed detection module to control relays based on detected weeds.
+   - Allows for automation in spraying, marking, or other field actions triggered by detection events.
+
+6. **Data Logging and Monitoring**
+   - Logs critical data points, such as weed detection results, LiDAR measurements, and actuator statuses, for analysis and monitoring.
+   - Facilitates debugging and system optimization through comprehensive logging and error handling.
+
+## Core Processes
+
+### 1. Weed Detection Workflow
+- **Step 1**: Raspberry Pi devices capture frames from cameras at regular intervals.
+- **Step 2**: The `owl.py` script preprocesses the frames and sends them to the AI accelerator.
+- **Step 3**: The deep learning model performs inference to detect weeds and classify them based on predefined categories.
+- **Step 4**: Detected objects are filtered by confidence thresholds and other criteria.
+- **Step 5**: Bounding boxes and other visual markers are generated for display, and relay controls are triggered if required.
+- **Step 6**: Results are logged locally and sent to the central server for aggregation and analysis.
+
+### 2. Height Control Workflow
+- **Step 1**: LiDAR sensors on Raspberry Pi devices measure the distance to the ground or crop surface.
+- **Step 2**: The control module compares measurements to the desired setpoint.
+- **Step 3**: Based on the difference, the module sends commands to hydraulic or electric actuators to adjust the height.
+- **Step 4**: Height adjustments are monitored and fine-tuned continuously to maintain optimal operation.
+
+### 3. Central Management Workflow
+- **Step 1**: The central server initializes ZeroMQ-based communication with all Raspberry Pi nodes.
+- **Step 2**: Nodes periodically send status updates and receive configuration or command updates from the server.
+- **Step 3**: The server can remotely trigger model updates, configuration changes, or execute specific commands on each node.
+- **Step 4**: Data collected from nodes is aggregated, analyzed, and stored for further processing or reporting.
+
+## Summary
+
+The Open Weed Locator (OWL) system is a powerful tool for precision agriculture, combining advanced AI-based weed detection, automated height control, and centralized management to enhance farming efficiency. By leveraging AI accelerators, LiDAR sensors, and robust communication protocols, OWL provides a flexible, scalable, and effective solution for modern agriculture needs.
