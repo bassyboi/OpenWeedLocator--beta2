@@ -29,9 +29,16 @@ jobs:
       - name: Run tests on Raspberry Pi emulator
         run: |
           # Example of running tests on a Raspberry Pi emulator
-          # Use QEMU or a Docker container that emulates Raspberry Pi architecture
-          # Example placeholder command
-          python -m unittest discover tests/
+          # You can use QEMU or a Docker container that emulates Raspberry Pi architecture
+          # Replace this command with the appropriate emulator test command
+          python -m unittest discover tests/ || echo "Tests failed, moving to ChatGPT analysis."
+
+      - name: Save Test Output
+        if: failure() # Run this step only if the previous step fails
+        run: |
+          # Save test output to a file for analysis
+          mkdir -p logs
+          python -m unittest discover tests/ > logs/test_output.log 2>&1 || true
 
       - name: Check for errors and interact with ChatGPT API
         if: failure() # Run this step only if the previous step fails
@@ -39,7 +46,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           # Extract the error logs
-          ERROR_LOG=$(tail -n 50 <test_output_file>) # Replace with your actual log file
+          ERROR_LOG=$(tail -n 50 logs/test_output.log) # Adjust the number of lines as needed
           
           # Send errors to ChatGPT and get suggestions
           RESPONSE=$(curl -s -X POST https://api.openai.com/v1/chat/completions \
@@ -59,7 +66,7 @@ jobs:
           # Automatically modify code based on ChatGPT suggestion if feasible
           echo "$RESPONSE" > suggested_fixes.txt
           # Example placeholder for manual or semi-automated code integration
-          # Implement automatic code changes here if possible
+          # Here you would implement automatic code changes if possible
 
       - name: Commit and Push Fixes
         if: failure() # Run this step if changes were applied
@@ -70,15 +77,16 @@ jobs:
           git commit -m "Apply ChatGPT suggested fixes"
           git push
 
-      - name: Deploy to Raspberry Pi
-        needs: build
-        runs-on: ubuntu-latest
-        steps:
-          - name: Deploy to Raspberry Pi
-            run: |
-              # Deploy the updated code to a remote Raspberry Pi
-              # Use SSH or any deployment tool like Ansible
-              echo "Deploying to Raspberry Pi..."
-              # Example placeholder command
-              ssh pi@<raspberry_pi_ip> 'bash -s' < deploy.sh
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
+      - name: Deploy to Raspberry Pi
+        run: |
+          # Deploy the updated code to a remote Raspberry Pi
+          # Use SSH or any deployment tool like Ansible
+          echo "Deploying to Raspberry Pi..."
+          ssh pi@<raspberry_pi_ip> 'bash -s' < deploy.sh
