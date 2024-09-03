@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - name: Install jq
         run: sudo apt-get install jq
@@ -60,8 +60,50 @@ jobs:
 
       - name: Run tests on Raspberry Pi emulator
         run: |
+          # Check if the 'tests' directory exists
+          if [ ! -d "tests" ]; then
+            echo "'tests' directory does not exist. Creating 'tests' directory."
+            mkdir tests
+          fi
+
           # Example of running tests on a Raspberry Pi emulator
-          python -m unittest discover tests/
+          python -m unittest discover tests/ || TEST_FAILED=true
+
+      - name: Handle Test Failures with ChatGPT
+        if: failure() # Run this step if the previous step failed
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "Test failures detected. Sending error log to ChatGPT for suggestions..."
+          
+          # Capture the error log
+          ERROR_LOG=$(cat /home/runner/work/_temp/_stderr)  # Adjust the path to where error logs are stored
+
+          # Send the error log to ChatGPT for suggestions
+          RESPONSE=$(curl -s -X POST https://api.openai.com/v1/chat/completions \
+          -H "Authorization: Bearer $OPENAI_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "The following error was found during testing:\n'"$ERROR_LOG"'\nPlease provide the exact code changes needed to fix the error in a structured JSON format."}]
+          }' | jq -r '.choices[0].message.content')
+
+          # Check if RESPONSE is not empty
+          if [ -z "$RESPONSE" ]; then
+            echo "No suggestion from ChatGPT. Skipping code changes."
+            exit 1
+          else
+            echo "Suggestion from ChatGPT: $RESPONSE"
+          fi
+
+          # Save the response to a file
+          echo "$RESPONSE" > suggested_changes.json
+
+          # Use a Python script to parse the JSON and apply the changes
+          python apply_changes.py suggested_changes.json
+
+          # Show the diff for verification
+          git diff
 
       - name: Commit and Push Fixes
         if: success() # Run this step if changes were applied
