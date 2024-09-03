@@ -10,6 +10,20 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v2
+        with:
+          persist-credentials: false  # Prevents using the default GITHUB_TOKEN
+
+      - name: Set up Git for pushing changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Authenticate using Personal Access Token
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}  # Use your PAT stored in secrets
+        run: |
+          echo "https://x-access-token:${GH_TOKEN}@github.com" > ~/.git-credentials
+          git config --global credential.helper store
 
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -18,22 +32,16 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install requests
-          pip install openai
+          pip install requests openai
 
       - name: Generate Response with GPT
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}  # Use the newly created GH_TOKEN secret
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           python .github/workflows/auto_respond.py
-
-      - name: Configure Git for GitHub Actions
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
       - name: Commit and Push Changes
         env:
@@ -41,4 +49,4 @@ jobs:
         run: |
           git add .
           git commit -m "Apply ChatGPT suggested fixes"
-          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git HEAD:main
+          git push origin HEAD:main
