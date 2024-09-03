@@ -1,3 +1,11 @@
+name: Auto Comment on Issues
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+
 jobs:
   comment:
     runs-on: ubuntu-latest
@@ -9,36 +17,52 @@ jobs:
       uses: actions/github-script@v0.9.0
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
       with:
         script: |
           const openai = require('openai-api');
           const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
           const openaiInstance = new openai(OPENAI_API_KEY);
 
-          const issueTitle = context.payload.issue.title;
-          const issueBody = context.payload.issue.body;
+          // Context based on whether it's an issue or a comment
+          let issueTitle, issueBody, issue_number;
+          if (github.context.eventName === 'issues') {
+            issueTitle = github.context.payload.issue.title;
+            issueBody = github.context.payload.issue.body;
+            issue_number = github.context.payload.issue.number;
+          } else if (github.context.eventName === 'issue_comment') {
+            issueTitle = github.context.payload.issue.title; // Title is available directly from the issue linked to the comment
+            issueBody = github.context.payload.comment.body; // Comment body as the main context
+            issue_number = github.context.payload.issue.number;
+          }
+
           const prompt = `Title: ${issueTitle}\nBody: ${issueBody}\n\nPlease provide a helpful comment:`;
 
-          (async () => {
+          try {
             const gptResponse = await openaiInstance.complete({
               engine: 'davinci',
               prompt: prompt,
-              maxTokens: 350,  // Increased token limit for more detailed responses
+              maxTokens: 350,
               temperature: 0,
               topP: 1,
               frequencyPenalty: 0,
               presencePenalty: 0
             });
 
-            const comment = gptResponse.data.choices[0].text.trim();
-            const issue_number = context.payload.issue.number;
-            const githubToken = process.env.GITHUB_TOKEN;
-            const octokit = new github.GitHub(githubToken);
+            if (gptResponse.data && gptResponse.data.choices && gptResponse.data.choices.length > 0) {
+              const comment = gptResponse.data.choices[0].text.trim();
+              const ghToken = process.env.GH_TOKEN;
+              const octokit = new github.GitHub(ghToken);
 
-            await octokit.issues.createComment({
-              ...context.repo,
-              issue_number: issue_number,
-              body: comment
-            });
-          })();
+              await octokit.issues.createComment({
+                ...github.context.repo,
+                issue_number: issue_number,
+                body: comment
+              });
+            } else {
+              console.log('No response generated from OpenAI.');
+            }
+          } catch (error) {
+            console.error('Failed to generate or post comment:', error);
+            // Optionally, you can handle specific error scenarios here
+          }
