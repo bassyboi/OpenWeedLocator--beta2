@@ -9,21 +9,33 @@ def generate_response(issue_title, issue_body):
     prompt = f"An issue was raised with the title: '{issue_title}'. The content is: '{issue_body}'. Provide a helpful and concise response to the issue."
     
     response = openai.Completion.create(
-      model="gpt-4",
-      prompt=prompt,
-      max_tokens=150,
-      temperature=0.7
+        model="gpt-4",
+        prompt=prompt,
+        max_tokens=150,
+        temperature=0.7
     )
     
     return response.choices[0].text.strip()
 
 # GitHub setup
-github_token = os.getenv('GITHUB_TOKEN')
-g = Github(github_token)
-repo = g.get_repo(os.getenv('GITHUB_REPOSITORY'))
-issue_number = int(os.getenv('ISSUE_NUMBER'))
+github_token = os.getenv('GH_TOKEN')  # Use the correct secret name 'GH_TOKEN'
+if not github_token:
+    raise ValueError("GitHub token not found in environment variables.")
 
-issue = repo.get_issue(number=issue_number)
+g = Github(github_token)
+
+repo_name = os.getenv('GITHUB_REPOSITORY')
+if not repo_name:
+    raise ValueError("GitHub repository not specified in environment variables.")
+
+repo = g.get_repo(repo_name)
+
+issue_number = os.getenv('ISSUE_NUMBER')
+if not issue_number:
+    raise ValueError("Issue number not specified in environment variables.")
+
+issue = repo.get_issue(number=int(issue_number))
+
 response = generate_response(issue.title, issue.body)
 
 # Post response as a comment on the GitHub issue
