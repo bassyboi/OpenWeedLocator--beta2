@@ -8,7 +8,7 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 def generate_response(issue_title, issue_body):
     prompt = f"An issue was raised with the title: '{issue_title}'. The content is: '{issue_body}'. Provide a helpful and concise response to the issue."
 
-    # Use the new `openai.ChatCompletion.create` method for GPT models
+    # Use the `openai.ChatCompletion.create` method for GPT models
     response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[
@@ -22,7 +22,7 @@ def generate_response(issue_title, issue_body):
     return response['choices'][0]['message']['content'].strip()
 
 # GitHub setup
-github_token = os.getenv('GH_TOKEN')  # Use the correct secret name 'GH_TOKEN'
+github_token = os.getenv('GH_TOKEN')
 if not github_token:
     raise ValueError("GitHub token not found in environment variables.")
 
