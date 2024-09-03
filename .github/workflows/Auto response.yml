@@ -7,11 +7,12 @@ on:
 jobs:
   auto-respond:
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v2
         with:
-          persist-credentials: false  # Do not use default GITHUB_TOKEN
+          persist-credentials: false  # Prevent default token usage
 
       - name: Set up Git for pushing changes
         run: |
@@ -20,9 +21,9 @@ jobs:
 
       - name: Authenticate using Personal Access Token
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}  # Use the new PAT secret
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}  # Reference the GH_TOKEN secret
         run: |
-          git remote set-url origin https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
 
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -31,12 +32,15 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install requests openai PyGithub  # Install all necessary dependencies
+          pip install requests openai PyGithub  # Install required dependencies
+
+      - name: Debug - Print Environment Variables (Optional)
+        run: env  # Prints all environment variables to the console for debugging (use carefully)
 
       - name: Generate Response with GPT
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # Reference the OPENAI_API_KEY secret
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}  # Reference the GH_TOKEN secret
           GITHUB_REPOSITORY: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
@@ -44,7 +48,7 @@ jobs:
 
       - name: Commit and Push Changes
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}  # Use PAT secret
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}  # Reference the GH_TOKEN secret
         run: |
           git add .
           git commit -m "Apply ChatGPT suggested fixes"
