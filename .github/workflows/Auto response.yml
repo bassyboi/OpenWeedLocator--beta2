@@ -2,7 +2,7 @@ name: Auto Comment on Issues
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened, edited]  # This configuration already triggers on newly opened issues.
   issue_comment:
     types: [created]
 
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3  # Use the latest compatible version
+      uses: actions/checkout@v3  # Using the latest stable version.
 
     - name: Auto comment on issue
       uses: actions/github-script@v6
@@ -25,49 +25,52 @@ jobs:
           const eventName = context.eventName;
           let issueTitle, issueBody, issue_number;
 
+          // Check the type of event and extract necessary information
           if (eventName === 'issues') {
             issueTitle = context.payload.issue.title;
-            issueBody = context.payload.issue.body;
+            issueBody = context.payload.issue.body || 'No additional details provided.'; // Handle cases where the body might be empty.
             issue_number = context.payload.issue.number;
-          } else if (eventName === 'issue_comment') {
-            issueTitle = context.payload.issue.title;  // Assuming this might not be available directly and needs a proper path
-            issueBody = context.payload.comment.body;
-            issue_number = context.payload.issue.number;
-          }
+            const action = context.payload.action;  // Capture the action to differentiate between opened and edited issues.
 
-          const prompt = `Title: ${issueTitle}\nBody: ${issueBody}\n\nPlease provide a helpful comment:`;
-          const data = JSON.stringify({
-            prompt: prompt,
-            max_tokens: 350,
-            temperature: 0,
-            top_p: 1,
-            frequency_penalty: 0,
-            presence_penalty: 0,
-            model: "text-davinci-002"
-          });
+            // Generate prompt based on the action
+            const prompt = action === 'opened' ? 
+              `A new issue titled "${issueTitle}" has been opened with the following details: ${issueBody}. Please provide a helpful welcome message and initial guidance.` :
+              `Issue titled "${issueTitle}" has been edited. Updated details: ${issueBody}. Please update the response accordingly.`;
 
-          const response = await fetch('https://api.openai.com/v1/completions', {
-            method: 'POST',
-            body: data,
-            headers: {
-              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          const responseData = await response.json();
-
-          if (responseData.choices && responseData.choices.length > 0) {
-            const comment = responseData.choices[0].text.trim();
-            const ghToken = process.env.GH_TOKEN;
-            const octokit = getOctokit(ghToken);
-
-            await octokit.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue_number,
-              body: comment
+            const data = JSON.stringify({
+              prompt: prompt,
+              max_tokens: 350,
+              temperature: 0,
+              top_p: 1,
+              frequency_penalty: 0,
+              presence_penalty: 0,
+              model: "text-davinci-002"
             });
-          } else {
-            console.log('No response generated from OpenAI.');
+
+            const response = await fetch('https://api.openai.com/v1/completions', {
+              method: 'POST',
+              body: data,
+              headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            const responseData = await response.json();
+
+            if (responseData.choices && responseData.choices.length > 0) {
+              const comment = responseData.choices[0].text.trim();
+              const octokit = getOctokit(process.env.GH_TOKEN);
+
+              await octokit.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number,
+                body: comment
+              });
+            } else {
+              console.log('No response generated from OpenAI.');
+            }
+          } else if (eventName === 'issue_comment') {
+            // Handle issue comments if necessary
           }
