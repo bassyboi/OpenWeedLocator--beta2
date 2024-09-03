@@ -31,7 +31,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install requests openai
+          pip install requests openai PyGithub  # Install all necessary dependencies
 
       - name: Generate Response with GPT
         env:
