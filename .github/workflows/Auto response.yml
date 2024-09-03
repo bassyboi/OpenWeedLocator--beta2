@@ -1,4 +1,4 @@
-name: Auto Comment
+name: Auto Comment on Issues
 
 on:
   issues:
@@ -11,25 +11,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3  # Updated to the latest version
 
     - name: Auto comment on issue
-      uses: actions/github-script@v6
+      uses: actions/github-script@v6  # Make sure it's compatible with Node 20
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
       with:
         script: |
-          // Context based on whether it's an issue or a comment
+          const { context, getOctokit } = require('@actions/github');
+
+          const eventName = context.eventName;
           let issueTitle, issueBody, issue_number;
-          if (github.context.eventName === 'issues') {
-            issueTitle = github.context.payload.issue.title;
-            issueBody = github.context.payload.issue.body;
-            issue_number = github.context.payload.issue.number;
-          } else if (github.context.eventName === 'issue_comment') {
-            issueTitle = github.context.payload.issue.title; // Title is available directly from the issue linked to the comment
-            issueBody = github.context.payload.comment.body; // Comment body as the main context
-            issue_number = github.context.payload.issue.number;
+
+          if (eventName === 'issues') {
+            issueTitle = context.payload.issue.title;
+            issueBody = context.payload.issue.body;
+            issue_number = context.payload.issue.number;
+          } else if (eventName === 'issue_comment') {
+            issueTitle = context.payload.issue.title;
+            issueBody = context.payload.comment.body;
+            issue_number = context.payload.issue.number;
           }
 
           const prompt = `Title: ${issueTitle}\nBody: ${issueBody}\n\nPlease provide a helpful comment:`;
@@ -57,11 +60,11 @@ jobs:
           if (responseData.choices && responseData.choices.length > 0) {
             const comment = responseData.choices[0].text.trim();
             const ghToken = process.env.GH_TOKEN;
-            const octokit = github.getOctokit(ghToken);
+            const octokit = getOctokit(ghToken);
 
             await octokit.rest.issues.createComment({
-              owner: github.context.repo.owner,
-              repo: github.context.repo.repo,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
               issue_number: issue_number,
               body: comment
             });
