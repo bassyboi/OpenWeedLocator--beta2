@@ -1,4 +1,4 @@
-name: Auto Comment on Issues
+name: Auto Comment
 
 on:
   issues:
@@ -20,9 +20,6 @@ jobs:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
       with:
         script: |
-          const axios = require('axios');
-          const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
           // Context based on whether it's an issue or a comment
           let issueTitle, issueBody, issue_number;
           if (github.context.eventName === 'issues') {
@@ -36,36 +33,38 @@ jobs:
           }
 
           const prompt = `Title: ${issueTitle}\nBody: ${issueBody}\n\nPlease provide a helpful comment:`;
-          const data = {
+          const data = JSON.stringify({
             prompt: prompt,
             max_tokens: 350,
             temperature: 0,
             top_p: 1,
             frequency_penalty: 0,
             presence_penalty: 0,
-            model: "text-davinci-003"
-          };
+            model: "text-davinci-002"
+          });
 
-          axios.post('https://api.openai.com/v1/completions', data, {
+          const response = await fetch('https://api.openai.com/v1/completions', {
+            method: 'POST',
+            body: data,
             headers: {
-              'Authorization': `Bearer ${OPENAI_API_KEY}`,
+              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
               'Content-Type': 'application/json'
             }
-          }).then(response => {
-            if (response.data.choices && response.data.choices.length > 0) {
-              const comment = response.data.choices[0].text.trim();
-              const ghToken = process.env.GH_TOKEN;
-              const octokit = require('@actions/github').getOctokit(ghToken);
-
-              octokit.rest.issues.createComment({
-                owner: github.context.repo.owner,
-                repo: github.context.repo.repo,
-                issue_number: issue_number,
-                body: comment
-              });
-            } else {
-              console.log('No response generated from OpenAI.');
-            }
-          }).catch(error => {
-            console.error('Failed to generate or post comment:', error.message);
           });
+
+          const responseData = await response.json();
+
+          if (responseData.choices && responseData.choices.length > 0) {
+            const comment = responseData.choices[0].text.trim();
+            const ghToken = process.env.GH_TOKEN;
+            const octokit = github.getOctokit(ghToken);
+
+            await octokit.rest.issues.createComment({
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
+              issue_number: issue_number,
+              body: comment
+            });
+          } else {
+            console.log('No response generated from OpenAI.');
+          }
