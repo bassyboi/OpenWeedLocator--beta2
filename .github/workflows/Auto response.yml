@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3  # Updated to the latest version
+      uses: actions/checkout@v3  # Use the latest compatible version
 
     - name: Auto comment on issue
-      uses: actions/github-script@v6  # Make sure it's compatible with Node 20
+      uses: actions/github-script@v6
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -30,7 +30,7 @@ jobs:
             issueBody = context.payload.issue.body;
             issue_number = context.payload.issue.number;
           } else if (eventName === 'issue_comment') {
-            issueTitle = context.payload.issue.title;
+            issueTitle = context.payload.issue.title;  // Assuming this might not be available directly and needs a proper path
             issueBody = context.payload.comment.body;
             issue_number = context.payload.issue.number;
           }
